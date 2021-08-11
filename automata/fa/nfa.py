@@ -20,6 +20,9 @@ class NFA(fa.FA):
         self.final_states = final_states.copy()
         self.validate()
 
+    def __reversed__(self):
+        return self.reverse()
+
     @classmethod
     def from_dfa(cls, dfa):
         """Initialize this NFA as one equivalent to the given DFA."""
@@ -118,3 +121,37 @@ class NFA(fa.FA):
             yield current_states
 
         self._check_for_input_rejection(current_states)
+
+    def reverse(self):
+        """
+        Given an NFA which accepts the language L this function
+        returns an NFA which accepts the reverse of L.
+        """
+        new_states = set(self.states)
+        new_initial_state = 0
+        while new_initial_state in self.states:
+            new_initial_state += 1
+        new_states.add(new_initial_state)
+
+        new_transitions = dict()
+        for state in new_states:
+            new_transitions[state] = dict()
+        for state_a, transitions in self.transitions.items():
+            for symbol, states in transitions.items():
+                for state_b in states:
+                    if symbol not in new_transitions[state_b]:
+                        new_transitions[state_b][symbol] = set()
+                    new_transitions[state_b][symbol].add(state_a)
+        new_transitions[new_initial_state][''] = set()
+        for state in self.final_states:
+            new_transitions[new_initial_state][''].add(state)
+
+        new_final_states = {self.initial_state}
+
+        return NFA(states=new_states,
+                   input_symbols=self.input_symbols,
+                   transitions=new_transitions,
+                   initial_state=new_initial_state,
+                   final_states=new_final_states
+                  )
+

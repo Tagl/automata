@@ -164,3 +164,22 @@ class TestNFA(test_fa.TestFA):
         # We don't care what the output is, just as long as no exception is
         # raised
         nose.assert_not_equal(nfa.accepts_input(''), None)
+
+    def test_reverse(self):
+        nfa = NFA(
+                states={0,1,2,4},
+                input_symbols={'a', 'b'},
+                transitions={0: {'a': {1}},
+                             1: {'a': {2}, 'b': {1, 2}},
+                             2: {},
+                             3: {'a': {2}, 'b': {2}}
+                            },
+                initial_state=0,
+                final_states={2})
+
+        reverse_nfa = nfa.reverse()
+        nose.assert_equal(reverse_nfa.accepts_input('a'), False)
+        nose.assert_equal(reverse_nfa.accepts_input('ab'), False)
+        nose.assert_equal(reverse_nfa.accepts_input('ba'), True)
+        nose.assert_equal(reverse_nfa.accepts_input('bba'), True)
+        nose.assert_equal(reverse_nfa.accepts_input('bbba'), True)
