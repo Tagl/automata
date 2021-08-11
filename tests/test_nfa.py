@@ -165,6 +165,53 @@ class TestNFA(test_fa.TestFA):
         # raised
         nose.assert_not_equal(nfa.accepts_input(''), None)
 
+    def test_operations_other_type(self):
+        nfa = NFA(
+                states={'q1', 'q2', 'q3', 'q4'},
+                input_symbols={'0', '1'},
+                transitions={'q1': {'0': {'q1'}, '1': {'q1', 'q2'}},
+                             'q2': {'': {'q2'}, '0': {'q2'}},
+                             'q3': {'1': {'q4'}},
+                             'q4': {'0': {'q4'}, '1': {'q4'}}},
+                initial_state='q1',
+                final_states={'q2', 'q4'})
+        other = 42
+        with nose.assert_raises(NotImplementedError):
+            nfa + other
+
+    def test_concatenate(self):
+        nfa_a = NFA(
+                states={'q1', 'q2', 'q3', 'q4'},
+                input_symbols={'0', '1'},
+                transitions={'q1': {'0': {'q1'}, '1': {'q1', 'q2'}},
+                             'q2': {'': {'q2'}, '0': {'q2'}},
+                             'q3': {'1': {'q4'}},
+                             'q4': {'0': {'q4'}, '1': {'q4'}}},
+                initial_state='q1',
+                final_states={'q2', 'q4'})
+
+        nfa_b = NFA(
+                states={'r1', 'r2', 'r3'},
+                input_symbols={'0', '1'},
+                transitions={'r1': {'': {'r3'}, '1': {'r2'}},
+                             'r2': {'0': {'r2', 'r3'}, '1': {'r3'}},
+                             'r3': {'0': {'r1'}}},
+                initial_state='r1',
+                final_states={'r1'})
+
+        concat_nfa = nfa_a + nfa_b
+
+        nose.assert_equal(concat_nfa.accepts_input(''), False)
+        nose.assert_equal(concat_nfa.accepts_input('0'), False)
+        nose.assert_equal(concat_nfa.accepts_input('1'), True)
+        nose.assert_equal(concat_nfa.accepts_input('00'), False)
+        nose.assert_equal(concat_nfa.accepts_input('01'), True)
+        nose.assert_equal(concat_nfa.accepts_input('10'), True)
+        nose.assert_equal(concat_nfa.accepts_input('11'), True)
+        nose.assert_equal(concat_nfa.accepts_input('101'), True)
+        nose.assert_equal(concat_nfa.accepts_input('101100'), True)
+        nose.assert_equal(concat_nfa.accepts_input('1010'), True)
+
     def test_reverse(self):
         nfa = NFA(
                 states={0,1,2,4},
@@ -177,7 +224,7 @@ class TestNFA(test_fa.TestFA):
                 initial_state=0,
                 final_states={2})
 
-        reverse_nfa = nfa.reverse()
+        reverse_nfa = reversed(nfa)
         nose.assert_equal(reverse_nfa.accepts_input('a'), False)
         nose.assert_equal(reverse_nfa.accepts_input('ab'), False)
         nose.assert_equal(reverse_nfa.accepts_input('ba'), True)

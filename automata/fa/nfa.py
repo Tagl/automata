@@ -20,6 +20,12 @@ class NFA(fa.FA):
         self.final_states = final_states.copy()
         self.validate()
 
+    def __add__(self, other):
+        if isinstance(other, NFA):
+            return self.concatenate(other)
+        else:
+            raise NotImplementedError
+
     def __reversed__(self):
         return self.reverse()
 
@@ -121,6 +127,58 @@ class NFA(fa.FA):
             yield current_states
 
         self._check_for_input_rejection(current_states)
+
+    def concatenate(self, other):
+        """
+        Given two NFAs, M1 and M2, which accept the languages
+        L1 and L2 respectively, returns an NFA which accepts
+        the languages L1 concatenated with L2.
+        """
+        state_map_a = dict()
+        for state in self.states:
+            state_map_a[state] = len(state_map_a)
+        
+        state_map_b = dict()
+        for state in other.states:
+            state_map_b[state] = len(state_map_a) + len(state_map_b)
+
+        new_states = set(state_map_a.values()) | set(state_map_b.values())
+        new_transitions = dict()
+        for state in new_states:
+            new_transitions[state] = dict()
+        # Transitions of self
+        for state_a, transitions in self.transitions.items():
+            for symbol, states in transitions.items():
+                new_transitions[state_map_a[state_a]][symbol] = {
+                    state_map_a[state_b] for state_b in states
+                }
+
+        # Transitions from self to other
+        for state in self.final_states:
+            if '' not in new_transitions[state_map_a[state]]:
+                new_transitions[state_map_a[state]][''] = set()
+            new_transitions[state_map_a[state]][''].add(
+                state_map_b[other.initial_state]
+            )
+
+        # Transitions of other
+        for state_a, transitions in other.transitions.items():
+            for symbol, states in transitions.items():
+                new_transitions[state_map_b[state_a]][symbol] = {
+                    state_map_b[state_b] for state_b in states
+                }
+
+        # Final states of other
+        new_final_states = {state_map_b[state] for state in other.final_states}
+
+        return NFA(states=new_states,
+                   input_symbols=self.input_symbols | other.input_symbols,
+                   transitions=new_transitions,
+                   initial_state=state_map_a[self.initial_state],
+                   final_states=new_final_states
+                  )
+
+
 
     def reverse(self):
         """
