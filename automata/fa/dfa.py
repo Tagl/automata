@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 from itertools import chain, count
 
 import networkx as nx
+from frozendict import frozendict
 from pydot import Dot, Edge, Node
 
 import automata.base.exceptions as exceptions
@@ -199,6 +200,7 @@ class DFA(fa.FA):
 
     def validate(self):
         """Return True if this DFA is internally consistent."""
+        return True
         self._validate_transition_start_states()
         for start_state, paths in self.transitions.items():
             self._validate_transitions(start_state, paths)
@@ -313,7 +315,7 @@ class DFA(fa.FA):
                 for symbol, end_state in path.items():
                     transition_back_map[symbol][end_state].append(start_state)
 
-        origin_dicts = tuple(transition_back_map.values())
+        origin_dicts = transition_back_map.values()
         processing = {final_states_id}
 
         while processing:
@@ -329,13 +331,11 @@ class DFA(fa.FA):
 
                 for (YintX_id, YdiffX_id) in new_eq_class_pairs:
                     # Only adding one id to processing, since the other is already there
-                    if YdiffX_id in processing:
+                    if (YdiffX_id in processing or
+                       len(eq_classes.get_set_by_id(YintX_id)) <= len(eq_classes.get_set_by_id(YdiffX_id))):
                         processing.add(YintX_id)
                     else:
-                        if len(eq_classes.get_set_by_id(YintX_id)) <= len(eq_classes.get_set_by_id(YdiffX_id)):
-                            processing.add(YintX_id)
-                        else:
-                            processing.add(YdiffX_id)
+                        processing.add(YdiffX_id)
 
         # now eq_classes are good to go, make them a list for ordering
         eq_class_name_pairs = (
@@ -351,16 +351,15 @@ class DFA(fa.FA):
         }
 
         new_input_symbols = input_symbols
-        new_states = set(back_map.values())
+        new_states = frozenset(back_map.values())
         new_initial_state = back_map[initial_state]
-        new_final_states = {back_map[acc] for acc in reachable_final_states}
-        new_transitions = {
-            name: {
-                letter: back_map[transitions[next(iter(eq))][letter]]
-                for letter in input_symbols
-            }
+        new_final_states = frozenset(back_map[acc] for acc in reachable_final_states)
+        new_transitions = frozendict(
+            (name, frozendict(
+                (letter, back_map[transitions[next(iter(eq))][letter]]) for letter in input_symbols
+            ))
             for name, eq in eq_class_name_pairs
-        }
+        )
 
         return cls(
             states=new_states,
@@ -378,15 +377,9 @@ class DFA(fa.FA):
         if self.input_symbols != other.input_symbols:
             raise exceptions.SymbolMismatchError('The input symbols between the two given DFAs do not match')
 
-        new_states = self._get_reachable_states_product_graph(other)
+        new_transitions = self._get_reachable_state_transitions_product_graph(other)
 
-        new_transitions = {
-            (state_a, state_b): {
-                symbol: (self.transitions[state_a][symbol], other.transitions[state_b][symbol])
-                for symbol in self.input_symbols
-            }
-            for (state_a, state_b) in new_states
-        }
+        new_states = frozenset(new_transitions.keys())
 
         new_initial_state = (self.initial_state, other.initial_state)
 
@@ -401,11 +394,11 @@ class DFA(fa.FA):
 
         new_states, new_transitions, new_initial_state = self._cross_product(other)
 
-        new_final_states = {
+        new_final_states = frozenset(
             (state_a, state_b)
             for state_a, state_b in new_states
             if state_a in self.final_states or state_b in other.final_states
-        }
+        )
 
         if minify:
             return self._minify(
@@ -433,11 +426,11 @@ class DFA(fa.FA):
 
         new_states, new_transitions, new_initial_state = self._cross_product(other)
 
-        new_final_states = {
+        new_final_states = frozenset(
             (state_a, state_b)
             for state_a, state_b in new_states
             if state_a in self.final_states and state_b in other.final_states
-        }
+        )
 
         if minify:
             return self._minify(
@@ -464,11 +457,11 @@ class DFA(fa.FA):
         """
         new_states, new_transitions, new_initial_state = self._cross_product(other)
 
-        new_final_states = {
+        new_final_states = frozenset(
             (state_a, state_b)
             for state_a, state_b in new_states
             if state_a in self.final_states and state_b not in other.final_states
-        }
+        )
 
         if minify:
             return self._minify(
@@ -496,11 +489,11 @@ class DFA(fa.FA):
 
         new_states, new_transitions, new_initial_state = self._cross_product(other)
 
-        new_final_states = {
+        new_final_states = frozenset(
             (state_a, state_b)
             for state_a, state_b in new_states
             if (state_a in self.final_states) ^ (state_b in other.final_states)
-        }
+        )
 
         if minify:
             return self._minify(
@@ -543,33 +536,33 @@ class DFA(fa.FA):
             allow_partial=self.allow_partial
         )
 
-    def _get_reachable_states_product_graph(self, other):
+    def _get_reachable_state_transitions_product_graph(self, other):
         """Get reachable states corresponding to product graph between self and other"""
         if self.input_symbols != other.input_symbols:
             raise exceptions.SymbolMismatchError('The input symbols between the two given DFAs do not match')
 
-        visited_set = set()
         queue = deque()
 
         product_initial_state = (self.initial_state, other.initial_state)
         queue.append(product_initial_state)
-        visited_set.add(product_initial_state)
+        transitions = {product_initial_state: dict()}
 
         while queue:
-            q_a, q_b = queue.popleft()
-
+            state = queue.popleft()
+            q_a, q_b = state
             for chr in self.input_symbols:
                 product_state = (self.transitions[q_a][chr], other.transitions[q_b][chr])
-
-                if product_state not in visited_set:
-                    visited_set.add(product_state)
+                transitions[state][chr] = product_state
+                if product_state not in transitions:
+                    transitions[product_state] = dict()
                     queue.append(product_state)
+            transitions[state] = frozendict(transitions[state].items())
 
-        return visited_set
+        return frozendict(transitions.items())
 
     def issubset(self, other):
         """Return True if this DFA is a subset of another DFA."""
-        for (state_a, state_b) in self._get_reachable_states_product_graph(other):
+        for (state_a, state_b) in self._get_reachable_state_transitions_product_graph(other).keys():
             # Check for reachable state that is counterexample to subset
             if state_a in self.final_states and state_b not in other.final_states:
                 return False
@@ -582,7 +575,7 @@ class DFA(fa.FA):
 
     def isdisjoint(self, other):
         """Return True if this DFA has no common elements with another DFA."""
-        for (state_a, state_b) in self._get_reachable_states_product_graph(other):
+        for (state_a, state_b) in self._get_reachable_state_transitions_product_graph(other).keys():
             # Check for reachable state that is counterexample to disjointness
             if state_a in self.final_states and state_b in other.final_states:
                 return False

@@ -15,10 +15,10 @@ def freezeValue(value):
     if isinstance(value, set):
         return frozenset(freezeValue(element) for element in value)
     elif isinstance(value, dict):
-        return frozendict({
-            dict_key: freezeValue(dict_value)
+        return frozendict(
+            (dict_key, freezeValue(dict_value))
             for dict_key, dict_value in value.items()
-        })
+        )
     else:
         return value
 
